@@ -1,0 +1,83 @@
+# Project URL: https://github.com/traefik/traefik
+# Docs URL: https://doc.traefik.io/traefik/
+services:
+  traefik:
+    image: traefik:v3.0
+    container_name: traefik
+    restart: unless-stopped
+
+    labels:
+      - "traefik.http.middlewares.admin-auth.basicauth.users=admin:$apr1$p4b8g1ht$Krx0Atqcv1qxYojQGzbRw0"
+
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      - TZ=Europe/Amsterdam # Change this to your timezone
+    networks:
+      - br0
+    ports:
+      - 80:80 # HTTP entryPoints
+      - 443:443 # HTTPS entryPoints
+      - 8080:8080 # Dashbaord WebGui 
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro # Docker socket to watch for Traefik
+      - ./traefik.yml:/traefik.yml:ro # Traefik config file
+      - ./certificates:/certificates # Docker volume to store the acme file for the Certifactes
+
+  nextcloud-db:
+    image: mariadb:10.11
+    container_name: nextcloud-db
+    command: --transaction-isolation=READ-COMMITTED --innodb_read_only_compressed=OFF
+    restart: unless-stopped
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+      - /opt/containers/nextcloud/database:/var/lib/mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=ef9ciz7chuiH
+      - MYSQL_PASSWORD=jaiLiej3duka
+      - MYSQL_DATABASE=db_nextcloud
+      - MYSQL_USER=nextcloud
+      - MYSQL_INITDB_SKIP_TZINFO=1
+      - MARIADB_AUTO_UPGRADE=1
+    networks:
+      - br0
+  nextcloud-redis:
+    image: redis:alpine
+    container_name: nextcloud-redis
+    hostname: nextcloud-redis
+    networks:
+      - br0
+    restart: unless-stopped
+    command: redis-server --requirepass woo5Uthoojie
+  nextcloud-app:
+    build: .
+    container_name: nextcloud-app
+    restart: unless-stopped
+    depends_on:
+      - nextcloud-db
+      - nextcloud-redis
+    environment:
+        TRUSTED_PROXIES: 172.20.255.254/16
+        OVERWRITEPROTOCOL: https
+        OVERWRITECLIURL: https://cloud.fellnhofer.engineering
+        OVERWRITEHOST: cloud.fellnhofer.engineering
+        REDIS_HOST: nextcloud-redis
+        REDIS_HOST_PASSWORD: woo5Uthoojie
+    volumes:
+      - ./app:/var/www/html
+      - ./data:/var/www/html/data
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.nextcloud.entrypoints=websecure"
+      - "traefik.http.routers.nextcloud.rule=(Host(`cloud.fellnhofer.engineering`))"
+      - "traefik.http.routers.nextcloud.tls=true"
+      - "traefik.http.routers.nextcloud.tls.certresolver=letencrypt"
+      - "traefik.docker.network=br0"
+    networks:
+      - br0
+
+networks:
+  br0:
+    external: true
+
