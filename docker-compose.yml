@@ -7,7 +7,7 @@ services:
     restart: unless-stopped
 
     labels:
-      - "traefik.http.middlewares.admin-auth.basicauth.users=admin:$apr1$p4b8g1ht$Krx0Atqcv1qxYojQGzbRw0"
+      - "traefik.http.middlewares.admin-auth.basicauth.users=admin:<pass>"
 
     security_opt:
       - no-new-privileges:true
@@ -34,8 +34,8 @@ services:
       - /etc/timezone:/etc/timezone:ro
       - /opt/containers/nextcloud/database:/var/lib/mysql
     environment:
-      - MYSQL_ROOT_PASSWORD=ef9ciz7chuiH
-      - MYSQL_PASSWORD=jaiLiej3duka
+      - MYSQL_ROOT_PASSWORD=<pass>
+      - MYSQL_PASSWORD=<pass>
       - MYSQL_DATABASE=db_nextcloud
       - MYSQL_USER=nextcloud
       - MYSQL_INITDB_SKIP_TZINFO=1
@@ -49,7 +49,7 @@ services:
     networks:
       - br0
     restart: unless-stopped
-    command: redis-server --requirepass woo5Uthoojie
+    command: redis-server --requirepass <pass>
   nextcloud-app:
     build: .
     container_name: nextcloud-app
@@ -63,14 +63,14 @@ services:
         OVERWRITECLIURL: https://cloud.fellnhofer.engineering
         OVERWRITEHOST: cloud.fellnhofer.engineering
         REDIS_HOST: nextcloud-redis
-        REDIS_HOST_PASSWORD: woo5Uthoojie
+        REDIS_HOST_PASSWORD: <pass>
     volumes:
       - ./app:/var/www/html
       - ./data:/var/www/html/data
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.nextcloud.entrypoints=websecure"
-      - "traefik.http.routers.nextcloud.rule=(Host(`cloud.fellnhofer.engineering`))"
+      - "traefik.http.routers.nextcloud.rule=(Host(`cloud.yourhost.com`))"
       - "traefik.http.routers.nextcloud.tls=true"
       - "traefik.http.routers.nextcloud.tls.certresolver=letencrypt"
       - "traefik.docker.network=br0"
