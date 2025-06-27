@@ -24,6 +24,31 @@ services:
       - ./traefik.yml:/traefik.yml:ro # Traefik config file
       - ./certificates:/certificates # Docker volume to store the acme file for the Certifactes
 
+  www:
+    image: 'bitnami/apache:latest'
+    container_name: bitnami-apache
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.www.entrypoints=websecure"
+      - "traefik.http.routers.www.rule=(Host(`www.fellnhofer.engineering`))"
+      - "traefik.http.routers.www.tls=true"
+      - "traefik.http.routers.www.tls.certresolver=letencrypt"
+      - "traefik.http.routers.www.middlewares=test-redirectscheme"
+
+      - "traefik.http.routers.www-unsec.entrypoints=web"
+      - "traefik.http.routers.www-unsec.middlewares=test-redirectscheme"
+      - "traefik.http.middlewares.test-redirectscheme.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.test-redirectscheme.redirectscheme.permanent=true"
+
+      - "traefik.docker.network=br0"
+    networks:
+      - br0
+    ports:
+      - '880:8080'
+      - '8443:8443'
+    volumes:
+      - ./www:/app
+
   nextcloud-db:
     image: mariadb:10.11
     container_name: nextcloud-db
@@ -70,7 +95,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.nextcloud.entrypoints=websecure"
-      - "traefik.http.routers.nextcloud.rule=(Host(`cloud.yourhost.com`))"
+      - "traefik.http.routers.nextcloud.rule=(Host(`cloud.fellnhofer.engineering`))"
       - "traefik.http.routers.nextcloud.tls=true"
       - "traefik.http.routers.nextcloud.tls.certresolver=letencrypt"
       - "traefik.docker.network=br0"
