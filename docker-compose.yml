@@ -27,6 +27,7 @@ services:
   www:
     image: 'bitnami/apache:latest'
     container_name: bitnami-apache
+    restart: unless-stopped
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.www.entrypoints=websecure"
