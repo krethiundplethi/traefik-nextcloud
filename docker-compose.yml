@@ -1,13 +1,30 @@
 # Project URL: https://github.com/traefik/traefik
 # Docs URL: https://doc.traefik.io/traefik/
 services:
+
   traefik:
-    image: traefik:v3.0
+    image: traefik:v3.7.11
     container_name: traefik
     restart: unless-stopped
 
+    secrets:
+      - traefik_basicauth
+
     labels:
-      - "traefik.http.middlewares.admin-auth.basicauth.users=admin:<pass>"
+     - "traefik.enable=true"
+
+     # Secure dashboard/API
+     - "traefik.http.routers.dashboard.rule=Host(`traefik.fellnhofer.engineering`) && (PathPrefix(`/api`) || PathPrefix(`/dashboard`))"
+     - "traefik.http.routers.dashboard.entrypoints=websecure"
+     - "traefik.http.routers.dashboard.service=api@internal"
+
+     # HTTPS / Let's Encrypt
+     - "traefik.http.routers.dashboard.tls=true"
+     - "traefik.http.routers.dashboard.tls.certresolver=letencrypt"
+
+     # Authentication
+     - "traefik.http.routers.dashboard.middlewares=admin-auth"
+     - "traefik.http.middlewares.admin-auth.basicauth.usersfile=/run/secrets/traefik_basicauth"
 
     security_opt:
       - no-new-privileges:true
@@ -18,7 +35,7 @@ services:
     ports:
       - 80:80 # HTTP entryPoints
       - 443:443 # HTTPS entryPoints
-      - 8080:8080 # Dashbaord WebGui 
+      # - 8080:8080 # Dashbaord WebGui 
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro # Docker socket to watch for Traefik
       - ./traefik.yml:/traefik.yml:ro # Traefik config file
@@ -28,25 +45,41 @@ services:
     image: 'bitnami/apache:latest'
     container_name: bitnami-apache
     restart: unless-stopped
+
     labels:
       - "traefik.enable=true"
+      - "traefik.http.services.www.loadbalancer.server.port=8080"
+
+      # HTTPS
       - "traefik.http.routers.www.entrypoints=websecure"
-      - "traefik.http.routers.www.rule=(Host(`www.fellnhofer.engineering`))"
+      - "traefik.http.routers.www.rule=Host(`www.fellnhofer.engineering`) || Host(`fellnhofer.engineering`)"
       - "traefik.http.routers.www.tls=true"
       - "traefik.http.routers.www.tls.certresolver=letencrypt"
-      - "traefik.http.routers.www.middlewares=test-redirectscheme"
 
+      # HTTP -> HTTPS
       - "traefik.http.routers.www-unsec.entrypoints=web"
+      - "traefik.http.routers.www-unsec.rule=Host(`www.fellnhofer.engineering`) || Host(`fellnhofer.engineering`)"
       - "traefik.http.routers.www-unsec.middlewares=test-redirectscheme"
+
       - "traefik.http.middlewares.test-redirectscheme.redirectscheme.scheme=https"
       - "traefik.http.middlewares.test-redirectscheme.redirectscheme.permanent=true"
 
       - "traefik.docker.network=br0"
+
+      # Security
+      - "traefik.http.middlewares.www-security.headers.customresponseheaders.Server="
+      - "traefik.http.routers.www.middlewares=www-security"
+
+      - "traefik.http.middlewares.www-security.headers.stsseconds=31536000"
+      - "traefik.http.middlewares.www-security.headers.contenttypenosniff=true"
+      - "traefik.http.middlewares.www-security.headers.referrerpolicy=strict-origin-when-cross-origin"
+      - "traefik.http.middlewares.www-security.headers.customresponseheaders.Server="
+
     networks:
       - br0
-    ports:
-      - '880:8080'
-      - '8443:8443'
+    #ports:
+      #- '880:8080'
+      #- '8443:8443'
     volumes:
       - ./www:/app
 
@@ -55,31 +88,47 @@ services:
     container_name: nextcloud-db
     command: --transaction-isolation=READ-COMMITTED --innodb_read_only_compressed=OFF
     restart: unless-stopped
+
+    secrets:
+      - mysql_root_password
+      - mysql_password
+
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
       - /opt/containers/nextcloud/database:/var/lib/mysql
     environment:
-      - MYSQL_ROOT_PASSWORD=<pass>
-      - MYSQL_PASSWORD=<pass>
-      - MYSQL_DATABASE=db_nextcloud
-      - MYSQL_USER=nextcloud
-      - MYSQL_INITDB_SKIP_TZINFO=1
+      - MARIADB_ROOT_PASSWORD_FILE=/run/secrets/mysql_root_password
+      - MARIADB_PASSWORD_FILE=/run/secrets/mysql_password
+      - MARIADB_DATABASE=db_nextcloud
+      - MARIADB_USER=nextcloud
+      - MARIADB_INITDB_SKIP_TZINFO=1
       - MARIADB_AUTO_UPGRADE=1
     networks:
       - br0
+
   nextcloud-redis:
     image: redis:alpine
     container_name: nextcloud-redis
+    restart: unless-stopped
+
+    secrets:
+      - nextcloud_redis
+
     hostname: nextcloud-redis
     networks:
       - br0
-    restart: unless-stopped
-    command: redis-server --requirepass <pass>
+
+    command: /bin/sh -c 'exec redis-server --requirepass "$$(cat /run/secrets/nextcloud_redis)"'
+
   nextcloud-app:
     build: .
     container_name: nextcloud-app
     restart: unless-stopped
+
+    secrets:
+      - nextcloud_redis
+
     depends_on:
       - nextcloud-db
       - nextcloud-redis
@@ -89,7 +138,7 @@ services:
         OVERWRITECLIURL: https://cloud.fellnhofer.engineering
         OVERWRITEHOST: cloud.fellnhofer.engineering
         REDIS_HOST: nextcloud-redis
-        REDIS_HOST_PASSWORD: <pass>
+        REDIS_HOST_PASSWORD_FILE: /run/secrets/nextcloud_redis
     volumes:
       - ./app:/var/www/html
       - ./data:/var/www/html/data
@@ -103,7 +152,22 @@ services:
     networks:
       - br0
 
+
 networks:
   br0:
     external: true
+
+
+secrets:
+  mysql_password:
+    file: ./secrets/mysql_password.txt
+
+  mysql_root_password:
+    file: ./secrets/mysql_root_password.txt
+
+  nextcloud_redis:
+    file: ./secrets/nextcloud_redis.txt
+
+  traefik_basicauth:
+    file: ./secrets/traefik_basicauth.txt
 

@@ -1,6 +1,6 @@
 api:
   dashboard: true # Optional can be disabled
-  insecure: true # Optional can be disabled
+  insecure: false # Optional can be disabled
   debug: false # Optional can be Enabled if needed for troubleshooting 
 entryPoints:
   web:
